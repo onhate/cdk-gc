@@ -5,6 +5,8 @@
 `cdk-gc` is a utility CLI tool designed to assist in the cleanup of unused assets of your CDK AWS CloudFormation stacks. It
 identifies and removes assets stored in the CloudFormation Deployment buckets that are no longer referenced by active stacks.
 
+see https://github.com/aws/aws-cdk-rfcs/issues/64
+
 ## Usage
 
 ```bash
