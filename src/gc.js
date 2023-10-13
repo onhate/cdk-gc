@@ -1,0 +1,162 @@
+const { consola } = require('consola');
+const { CloudFormation } = require('@aws-sdk/client-cloudformation');
+const { fromIni } = require('@aws-sdk/credential-providers');
+const { STS } = require('@aws-sdk/client-sts');
+const { S3 } = require('@aws-sdk/client-s3');
+
+/**
+ * @param client {CloudFormation}
+ * @param nextToken {string | undefined}
+ * @return {import('@aws-sdk/client-cloudformation').StackSummary[]}
+ */
+async function* listStacks(client, nextToken = undefined) {
+  const {
+    StackSummaries,
+    NextToken
+  } = await client.listStacks({
+    StackStatusFilter: ['CREATE_COMPLETE', 'UPDATE_COMPLETE'],
+    NextToken: nextToken
+  });
+  for (const stack of StackSummaries) {
+    yield stack;
+  }
+  if (NextToken) {
+    yield* listStacks(client, NextToken);
+  }
+}
+
+/**
+ *
+ * @param client {CloudFormation}
+ * @param stack {import('@aws-sdk/client-cloudformation').StackSummary}
+ * @return {Promise<any>}
+ */
+async function getTemplateAsJson(client, stack) {
+  const { TemplateBody } = await client.getTemplate({ StackName: stack.StackName, TemplateStage: 'Processed' });
+  try {
+    return JSON.parse(TemplateBody);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function* listObjects(client, bucket, nextToken = undefined) {
+  const {
+    Contents,
+    NextContinuationToken
+  } = await client.listObjectsV2({
+    Bucket: bucket,
+    ContinuationToken: nextToken
+  });
+  for (const object of Contents) {
+    if (object.Key.endsWith('.zip')) yield object;
+  }
+  if (NextContinuationToken) {
+    yield* listObjects(client, bucket, NextContinuationToken);
+  }
+}
+
+/**
+ *
+ * @param region
+ * @param credentials
+ * @return {CloudFormation}
+ */
+function getCloudFormation(sdkConfig) {
+  return new CloudFormation(sdkConfig);
+}
+
+/**
+ *
+ * @param region
+ * @param credentials
+ * @return {S3}
+ */
+function getS3(sdkConfig) {
+  return new S3(sdkConfig);
+}
+
+async function getAccountId(sdkConfig) {
+  const { Account } = await new STS(sdkConfig).getCallerIdentity();
+  return Account;
+}
+
+function parseBucket(name, { accountId, region }) {
+  return name.replace('${AWS::AccountId}', accountId).replace('${AWS::Region}', region);
+}
+
+function extractLambdaAssets(template, context) {
+  const lambdas = Object.values(template.Resources).filter(resource => resource.Type === 'AWS::Lambda::Function');
+  const s3Assets = lambdas.map(lambda => lambda.Properties.Code).filter(asset => asset?.S3Bucket);
+
+  return s3Assets.map(asset => {
+    const isString = typeof asset.S3Bucket === 'string';
+    const s3Bucket = isString ? asset.S3Bucket : asset.S3Bucket['Fn::Sub'];
+
+    const bucket = parseBucket(s3Bucket, context);
+    const key = asset.S3Key;
+    return [bucket, key];
+  });
+}
+
+/**
+ * @param template {any}
+ * @param accountId {string}
+ * @param region {string}
+ */
+function extractAssets(template, context) {
+  const lambdaAssets = extractLambdaAssets(template, context);
+
+  return [...lambdaAssets];
+}
+
+module.exports.gc = async function (ctx) {
+  const { args } = ctx;
+  const { profile, region } = args;
+  const credentials = fromIni({ profile });
+
+  const assetsInUse = [];
+  const sdkConfig = { region, credentials };
+
+  consola.start('Fetching stacks...');
+
+  const accountId = await getAccountId(sdkConfig);
+  const cloudformation = getCloudFormation(sdkConfig);
+  const s3 = getS3(sdkConfig);
+
+  const context = { accountId, region };
+
+  for await (const stack of listStacks(cloudformation)) {
+    const template = await getTemplateAsJson(cloudformation, stack);
+    if (template?.Parameters?.BootstrapVersion) {
+      const assets = extractAssets(template, context);
+      consola.log(' ', stack.StackName, 'has', assets.length, 'assets');
+      assetsInUse.push(...assets);
+    }
+  }
+
+  const assetsGroupedByBucket = assetsInUse.reduce((acc, [bucket, key]) => {
+    acc[bucket] = acc[bucket] ?? [];
+    acc[bucket].push(key);
+    return acc;
+  }, {});
+
+  consola.start('Fetching s3 assets...');
+
+  const removedAssets = [];
+  for (const [bucket, assetsToKeep] of Object.entries(assetsGroupedByBucket)) {
+    consola.log(' Listing files from ', bucket);
+    for await (const object of listObjects(s3, bucket)) {
+      if (assetsToKeep.includes(object.Key)) continue; // skip assets in use
+
+      consola.log(' ', 'Deleting', object.Key);
+      removedAssets.push(object.Key);
+      if (args.yes) {
+        await s3.deleteObject({ Bucket: bucket, Key: object.Key });
+      }
+    }
+  }
+
+  console.log('Removed', removedAssets.length, 'assets');
+  consola.success('Done');
+};
