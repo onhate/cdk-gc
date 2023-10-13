@@ -114,18 +114,18 @@ module.exports.gc = async function (ctx) {
   const { args } = ctx;
   const { profile, region } = args;
   const credentials = fromIni({ profile });
-
-  const assetsInUse = [];
   const sdkConfig = { region, credentials };
 
-  consola.start('Fetching stacks...');
+  consola.start('Setting up...');
 
-  const accountId = await getAccountId(sdkConfig);
   const cloudformation = getCloudFormation(sdkConfig);
   const s3 = getS3(sdkConfig);
+  const accountId = await getAccountId(sdkConfig);
 
   const context = { accountId, region };
 
+  consola.start('Fetching stacks...');
+  const assetsInUse = [];
   for await (const stack of listStacks(cloudformation)) {
     const template = await getTemplateAsJson(cloudformation, stack);
     if (template?.Parameters?.BootstrapVersion) {
