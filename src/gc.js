@@ -40,6 +40,12 @@ async function getTemplateAsJson(client, stack) {
   }
 }
 
+/**
+ * @param client {S3}
+ * @param bucket {string}
+ * @param nextToken {string | undefined}
+ * @return {import('@aws-sdk/client-s3').Object[]}
+ */
 async function* listObjects(client, bucket, nextToken = undefined) {
   const {
     Contents,
@@ -58,8 +64,7 @@ async function* listObjects(client, bucket, nextToken = undefined) {
 
 /**
  *
- * @param region
- * @param credentials
+ * @param sdkConfig {any}
  * @return {CloudFormation}
  */
 function getCloudFormation(sdkConfig) {
@@ -68,23 +73,37 @@ function getCloudFormation(sdkConfig) {
 
 /**
  *
- * @param region
- * @param credentials
+ * @param sdkConfig {any}
  * @return {S3}
  */
 function getS3(sdkConfig) {
   return new S3(sdkConfig);
 }
 
+/**
+ * @param sdkConfig {any}
+ * @return {Promise<string>}
+ */
 async function getAccountId(sdkConfig) {
   const { Account } = await new STS(sdkConfig).getCallerIdentity();
   return Account;
 }
 
+/**
+ * @param name {string}
+ * @param accountId {string}
+ * @param region {string}
+ * @return {string}
+ */
 function parseBucket(name, { accountId, region }) {
   return name.replace('${AWS::AccountId}', accountId).replace('${AWS::Region}', region);
 }
 
+/**
+ * @param template {any}
+ * @param context {any}
+ * @return {[string,string][]}
+ */
 function extractLambdaAssets(template, context) {
   const lambdas = Object.values(template.Resources).filter(resource => resource.Type === 'AWS::Lambda::Function');
   const s3Assets = lambdas.map(lambda => lambda.Properties.Code).filter(asset => asset?.S3Bucket);
@@ -101,8 +120,7 @@ function extractLambdaAssets(template, context) {
 
 /**
  * @param template {any}
- * @param accountId {string}
- * @param region {string}
+ * @param context {any}
  */
 function extractAssets(template, context) {
   const lambdaAssets = extractLambdaAssets(template, context);
@@ -110,6 +128,11 @@ function extractAssets(template, context) {
   return [...lambdaAssets];
 }
 
+/**
+ *
+ * @param ctx {import('citty').CommandContext}
+ * @return {Promise<void>}
+ */
 module.exports.gc = async function (ctx) {
   const { args } = ctx;
   const { profile, region } = args;
