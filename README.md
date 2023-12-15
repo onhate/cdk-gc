@@ -15,7 +15,7 @@ npx onhate/cdk-gc gc --profile <your-aws-profile> --region <your-aws-region> [--
 
 ## Options
 
-- --profile: Specify the AWS profile to use for authentication.
+- --profile: Specify the AWS profile to use for authentication. (optional)
 - --region: Set the AWS region for the cleanup operation.
 - --yes (Optional): Confirm and execute the cleanup (default to dry-run).
 
