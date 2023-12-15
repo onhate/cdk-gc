@@ -1,8 +1,8 @@
 const { defineCommand, runMain } = require('citty');
 const { gc } = require('./gc');
 
-const profile = { type: 'string', description: 'AWS profile', required: true };
 const region = { type: 'string', description: 'AWS region', required: true };
+const profile = { type: 'string', description: 'AWS profile' };
 const yes = { type: 'boolean', description: 'Confirm removal' };
 
 const command = defineCommand({

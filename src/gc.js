@@ -1,6 +1,6 @@
 const { consola } = require('consola');
 const { CloudFormation } = require('@aws-sdk/client-cloudformation');
-const { fromIni } = require('@aws-sdk/credential-providers');
+const { fromIni, fromEnv } = require('@aws-sdk/credential-providers');
 const { STS } = require('@aws-sdk/client-sts');
 const { S3 } = require('@aws-sdk/client-s3');
 
@@ -128,6 +128,12 @@ function extractAssets(template, context) {
   return [...lambdaAssets];
 }
 
+function getCredentials(args) {
+  const { profile } = args;
+  if (profile) return fromIni({ profile });
+  return fromEnv();
+}
+
 /**
  *
  * @param ctx {import('citty').CommandContext}
@@ -135,8 +141,8 @@ function extractAssets(template, context) {
  */
 module.exports.gc = async function (ctx) {
   const { args } = ctx;
-  const { profile, region } = args;
-  const credentials = fromIni({ profile });
+  const { region } = args;
+  const credentials = getCredentials(args);
   const sdkConfig = { region, credentials };
 
   consola.start('Setting up...');
