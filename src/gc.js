@@ -48,17 +48,17 @@ async function getTemplateAsJson(client, stack) {
  */
 async function* listObjects(client, bucket, nextToken = undefined) {
   const {
-    Contents,
-    NextContinuationToken
-  } = await client.listObjectsV2({
+    Versions,
+    NextVersionIdMarker,
+  } = await client.listObjectVersions({
     Bucket: bucket,
     ContinuationToken: nextToken
   });
-  for (const object of Contents) {
+  for (const object of Versions) {
     if (object.Key.endsWith('.zip')) yield object;
   }
-  if (NextContinuationToken) {
-    yield* listObjects(client, bucket, NextContinuationToken);
+  if (NextVersionIdMarker) {
+    yield* listObjects(client, bucket, NextVersionIdMarker);
   }
 }
 
@@ -178,7 +178,7 @@ module.exports.gc = async function (ctx) {
     for await (const object of listObjects(s3, bucket)) {
       if (assetsToKeep.includes(object.Key)) continue; // skip assets in use
 
-      consola.log(' ', 'Deleting', object.Key);
+      consola.log(' ', 'Deleting', object.Key, object.VersionId);
       removedAssets.push(object.Key);
       if (args.yes) {
         await s3.deleteObject({
