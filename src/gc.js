@@ -52,7 +52,7 @@ async function* listObjects(client, bucket, nextToken = undefined) {
     NextVersionIdMarker,
   } = await client.listObjectVersions({
     Bucket: bucket,
-    ContinuationToken: nextToken
+    VersionIdMarker: nextToken
   });
   for (const object of Versions) {
     if (object.Key.endsWith('.zip')) yield object;
