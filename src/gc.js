@@ -43,22 +43,25 @@ async function getTemplateAsJson(client, stack) {
 /**
  * @param client {S3}
  * @param bucket {string}
- * @param nextToken {string | undefined}
- * @return {import('@aws-sdk/client-s3').Object[]}
+ * @param keyMarker {string | undefined}
+ * @param versionIdMarker {string | undefined}
+ * @return {import('@aws-sdk/client-s3').ObjectVersion[]}
  */
-async function* listObjects(client, bucket, nextToken = undefined) {
+async function* listObjectVersions(client, bucket, keyMarker = undefined, versionIdMarker = undefined) {
   const {
     Versions,
+    NextKeyMarker,
     NextVersionIdMarker,
   } = await client.listObjectVersions({
     Bucket: bucket,
-    VersionIdMarker: nextToken
+    KeyMarker: keyMarker,
+    VersionIdMarker: versionIdMarker
   });
   for (const object of Versions) {
     if (object.Key.endsWith('.zip')) yield object;
   }
-  if (NextVersionIdMarker) {
-    yield* listObjects(client, bucket, NextVersionIdMarker);
+  if (NextKeyMarker && NextVersionIdMarker) {
+    yield* listObjectVersions(client, bucket, NextKeyMarker, NextVersionIdMarker);
   }
 }
 
@@ -175,7 +178,7 @@ module.exports.gc = async function (ctx) {
   const removedAssets = [];
   for (const [bucket, assetsToKeep] of Object.entries(assetsGroupedByBucket)) {
     consola.log(' Listing files from ', bucket);
-    for await (const object of listObjects(s3, bucket)) {
+    for await (const object of listObjectVersions(s3, bucket)) {
       if (assetsToKeep.includes(object.Key)) continue; // skip assets in use
 
       consola.log(' ', 'Deleting', object.Key, object.VersionId);
