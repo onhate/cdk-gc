@@ -181,7 +181,11 @@ module.exports.gc = async function (ctx) {
       consola.log(' ', 'Deleting', object.Key);
       removedAssets.push(object.Key);
       if (args.yes) {
-        await s3.deleteObject({ Bucket: bucket, Key: object.Key });
+        await s3.deleteObject({
+          Bucket: bucket,
+          Key: object.Key,
+          VersionId: object.VersionId
+        });
       }
     }
   }
