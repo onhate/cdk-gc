@@ -58,7 +58,7 @@ async function* listObjectVersions(client, bucket, keyMarker = undefined, versio
     VersionIdMarker: versionIdMarker
   });
   for (const object of Versions) {
-    if (object.Key.endsWith('.zip')) yield object;
+    yield object;
   }
   if (NextKeyMarker && NextVersionIdMarker) {
     yield* listObjectVersions(client, bucket, NextKeyMarker, NextVersionIdMarker);
@@ -144,7 +144,7 @@ function getCredentials(args) {
  */
 module.exports.gc = async function (ctx) {
   const { args } = ctx;
-  const { region } = args;
+  const { region, templates: excludeTemplates } = args;
   const credentials = getCredentials(args);
   const sdkConfig = { region, credentials };
 
@@ -181,14 +181,18 @@ module.exports.gc = async function (ctx) {
     for await (const object of listObjectVersions(s3, bucket)) {
       if (assetsToKeep.includes(object.Key)) continue; // skip assets in use
 
-      consola.log(' ', 'Deleting', object.Key, object.VersionId);
-      removedAssets.push(object.Key);
-      if (args.yes) {
-        await s3.deleteObject({
-          Bucket: bucket,
-          Key: object.Key,
-          VersionId: object.VersionId
-        });
+      const isZipFile = object.Key.endsWith('.zip');
+      const isJsonFile = object.Key.endsWith('.json');
+      if (isZipFile || (isJsonFile && excludeTemplates)) {
+        consola.log(' ', 'Deleting', object.Key, object.VersionId);
+        removedAssets.push(object.Key);
+        if (args.yes) {
+          await s3.deleteObject({
+            Bucket: bucket,
+            Key: object.Key,
+            VersionId: object.VersionId
+          });
+        }
       }
     }
   }
