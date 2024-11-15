@@ -1,3 +1,9 @@
+# WARNING
+
+CDK has officially released a gc feature https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-gc.html
+
+
+
 # cdk-gc
 
 ## Overview
